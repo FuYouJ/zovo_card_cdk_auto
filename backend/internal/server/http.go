@@ -154,6 +154,7 @@ func setupRoutes(r *gin.Engine) {
 		// 卡密状态查询：是否已用 + 充值邮箱（不返回 token）
 		lookup := api.Group("/lookup")
 		{
+			lookup.POST("/cdk", handler.LookupCDKStatus)
 			lookup.GET("/cdk", handler.LookupCDKStatus)
 			lookup.POST("/cdk/batch", handler.LookupCDKStatusBatch)
 			// 兼容旧路径

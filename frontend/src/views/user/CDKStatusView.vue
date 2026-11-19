@@ -163,7 +163,7 @@
             </button>
           </div>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-sm">
+        <div class="grid grid-cols-2 gap-2 text-center text-sm" :class="batchSummary.unavailable ? 'sm:grid-cols-6' : 'sm:grid-cols-5'">
           <div class="rounded-lg py-2" style="background: color-mix(in srgb, var(--good, #16a34a) 12%, transparent)">
             {{ t('cdkLookup.summaryUsed', { n: batchSummary.used }) }}
           </div>
@@ -178,6 +178,9 @@
           </div>
           <div class="rounded-lg py-2" style="background: color-mix(in srgb, var(--warn, #d97706) 12%, transparent)">
             {{ t('cdkLookup.summaryUnknown', { n: batchSummary.unknown }) }}
+          </div>
+          <div v-if="batchSummary.unavailable" class="rounded-lg bg-soft py-2">
+            {{ t('cdkLookup.summaryUnavailable', { n: batchSummary.unavailable }) }}
           </div>
         </div>
         <div class="overflow-x-auto rounded-xl border bd">
@@ -264,12 +267,13 @@ const batchResults = ref<CDKStatusResult[]>([])
 const parsedCodes = computed(() => parseCdks(batchText.value))
 
 const batchSummary = computed(() => {
-  const s = { used: 0, failed: 0, unused: 0, processing: 0, unknown: 0 }
+  const s = { used: 0, failed: 0, unused: 0, processing: 0, unknown: 0, unavailable: 0 }
   for (const row of batchResults.value) {
     if (row.status === 'used') s.used++
     else if (row.status === 'failed') s.failed++
     else if (row.status === 'unused') s.unused++
     else if (row.status === 'processing') s.processing++
+    else if (row.status === 'unavailable') s.unavailable++
     else s.unknown++
   }
   return s
@@ -286,7 +290,7 @@ function statusColor(status: string) {
   if (status === 'failed') return 'var(--err, #dc2626)'
   if (status === 'unused') return 'var(--ink)'
   if (status === 'processing') return 'var(--primary)'
-  if (status === 'disabled' || status === 'expired' || status === 'unknown') return 'var(--warn, #d97706)'
+  if (status === 'disabled' || status === 'expired' || status === 'unknown' || status === 'unavailable') return 'var(--warn, #d97706)'
   return 'var(--ink)'
 }
 
@@ -301,10 +305,14 @@ async function query() {
   error.value = ''
   result.value = null
   try {
-    const r = await fetch(`/api/v1/lookup/cdk?code=${encodeURIComponent(code)}`)
+    const r = await fetch('/api/v1/lookup/cdk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
     const data = await r.json().catch(() => ({}))
     if (!r.ok) {
-      error.value = data.error || data.message || t('cdkLookup.errNotFound')
+      error.value = data.error || data.message || t(r.status === 404 ? 'cdkLookup.errNotFound' : 'cdkLookup.errUnavailable')
       return
     }
     result.value = data as CDKStatusResult

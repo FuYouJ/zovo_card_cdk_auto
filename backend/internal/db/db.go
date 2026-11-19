@@ -87,6 +87,14 @@ func createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_cp_cdk_upstream ON cardplatform_cdk_codes(upstream_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_cp_cdk_prefix ON cardplatform_cdk_codes(code_prefix)`,
 
+		// 公开状态查询缓存独立于发码库存，查询不会把卡密加入可操作的库存。
+		`CREATE TABLE IF NOT EXISTS cardplatform_cdk_status_cache (
+			code_hash TEXT PRIMARY KEY,
+			status TEXT NOT NULL,
+			plan TEXT NOT NULL,
+			checked_at INTEGER NOT NULL
+		)`,
+
 		// CDK 备注（本站维护，按卡台上游 id；不依赖完整码是否已落库）
 		`CREATE TABLE IF NOT EXISTS cardplatform_cdk_notes (
 			upstream_id INTEGER PRIMARY KEY,

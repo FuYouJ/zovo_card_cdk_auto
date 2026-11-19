@@ -30,3 +30,11 @@ gh release create v1.2.4 cdk-bundle-linux-amd64.tgz cdk-bundle-linux-amd64.tgz.s
 `.github/workflows/release.yml`
 
 推送该文件需要 PAT 勾选 **workflow** 权限。之后 `git tag v*` 会自动构建并上传 bundle。
+
+## 卡密使用状态查询
+
+单张和批量查询先读本站订单、库存与状态缓存。查不到时，后端使用同一环境的卡网 API 密钥按前缀查 CDK 清单，只有清单返回的完整卡密与输入一致才采信其状态。客户只需提供完整卡密。
+
+未配置通用卡网 API 密钥时，使用 `GPT_REDEEM_API_KEY_FILE` 指向的服务器凭据文件。`GPT_REDEEM_API_ORIGIN` 必须与当前卡网环境一致。
+
+SQLite 的 `cardplatform_cdk_status_cache` 保存卡密摘要、状态、套餐和核实时间。五分钟内复用结果，过期后下一次查询再向卡网核实。补查不修改发码库存。卡网超时或拒绝查询时，页面提示暂时无法核实。

@@ -171,6 +171,7 @@ export default {
     summaryUnused: 'Unused {n}',
     summaryProcessing: 'Processing {n}',
     summaryUnknown: 'Not found {n}',
+    summaryUnavailable: 'Unavailable {n}',
     cdkLabel: 'CDK Code',
     cdkPlaceholder: 'SXC-XXXX-XXXX-XXXX-XXXX',
     queryBtn: 'Check CDK Status',
@@ -189,6 +190,7 @@ export default {
     msgUnused: 'This CDK has not been used yet.',
     msgProcessing: 'This CDK redeem is in progress.',
     errNotFound: 'CDK not found',
+    errUnavailable: 'Could not verify the CDK status. Please try again shortly.',
     errNetwork: 'Network error, please retry',
     status: {
       unused: 'Unused',
@@ -198,6 +200,7 @@ export default {
       expired: 'Expired',
       processing: 'Processing',
       unknown: 'Unknown',
+      unavailable: 'Unavailable',
     },
   },
 

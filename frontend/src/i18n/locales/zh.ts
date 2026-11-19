@@ -171,6 +171,7 @@ export default {
     summaryUnused: '未使用 {n}',
     summaryProcessing: '处理中 {n}',
     summaryUnknown: '未找到 {n}',
+    summaryUnavailable: '暂无法核实 {n}',
     cdkLabel: 'CDK 卡密',
     cdkPlaceholder: 'SXC-XXXX-XXXX-XXXX-XXXX',
     queryBtn: '查询卡密状态',
@@ -189,6 +190,7 @@ export default {
     msgUnused: '该卡密尚未使用。',
     msgProcessing: '该卡密兑换处理中。',
     errNotFound: '未找到该卡密记录',
+    errUnavailable: '暂时无法核实卡密状态，请稍后重试。',
     errNetwork: '网络错误，请重试',
     status: {
       unused: '未使用',
@@ -198,6 +200,7 @@ export default {
       expired: '已过期',
       processing: '处理中',
       unknown: '未知',
+      unavailable: '暂无法核实',
     },
   },
 

@@ -20,10 +20,12 @@ import (
 // 公开批量查询上限：每条可能回源卡台 Result，避免一次打爆上游。
 const lookupBatchMax = 100
 const lookupBatchWorkers = 4
+const lookupRequestTimeout = 15 * time.Second
+const lookupUnavailableMessage = "暂时无法核实卡密状态，请稍后重试。"
 
 type cdkLookupResult struct {
 	CDKCode      string  `json:"cdk_code"`
-	Status       string  `json:"status"` // unused | used | failed | disabled | expired | processing | unknown
+	Status       string  `json:"status"` // unused | used | failed | disabled | expired | processing | unknown | unavailable
 	Used         bool    `json:"used"`
 	CanResubmit  bool    `json:"can_resubmit"`
 	AccountEmail string  `json:"account_email,omitempty"`
@@ -33,11 +35,22 @@ type cdkLookupResult struct {
 	Message      string  `json:"message"`
 }
 
-// LookupCDKStatus GET /api/v1/lookup/cdk?code=  或兼容 ?cdk_code=
+// LookupCDKStatus POST /api/v1/lookup/cdk（GET 兼容已有调用方）。
 func LookupCDKStatus(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	code := strings.TrimSpace(c.Query("code"))
 	if code == "" {
-		code = strings.TrimSpace(c.Query("cdk_code"))
+		code = c.Query("cdk_code")
+	}
+	if c.Request.Method == http.MethodPost {
+		var req struct {
+			Code string `json:"code"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式无效"})
+			return
+		}
+		code = req.Code
 	}
 	code = strings.TrimSpace(code)
 	if code == "" {
@@ -45,7 +58,13 @@ func LookupCDKStatus(c *gin.Context) {
 		return
 	}
 
-	resp := lookupOneCDK(c.Request.Context(), code, deviceFrom(c))
+	ctx, cancel := context.WithTimeout(c.Request.Context(), lookupRequestTimeout)
+	defer cancel()
+	resp := lookupOneCDK(ctx, code, deviceFrom(c))
+	if resp.Status == "unavailable" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": resp.Message})
+		return
+	}
 	if resp.Status == "unknown" {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error":    "未找到该卡密记录",
@@ -62,6 +81,7 @@ func LookupCDKStatus(c *gin.Context) {
 // LookupCDKStatusBatch POST /api/v1/lookup/cdk/batch
 // body: { "codes": ["SXC-…"], "text": "可选整段粘贴" }
 func LookupCDKStatusBatch(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	var req struct {
 		Codes []string `json:"codes"`
 		Text  string   `json:"text"`
@@ -86,7 +106,8 @@ func LookupCDKStatusBatch(c *gin.Context) {
 	results := make([]cdkLookupResult, len(codes))
 	sem := make(chan struct{}, lookupBatchWorkers)
 	var wg sync.WaitGroup
-	ctx := c.Request.Context()
+	ctx, cancel := context.WithTimeout(c.Request.Context(), lookupRequestTimeout)
+	defer cancel()
 	device := deviceFrom(c)
 	for i, code := range codes {
 		wg.Add(1)
@@ -270,13 +291,27 @@ func lookupOneCDK(ctx context.Context, code, deviceID string) cdkLookupResult {
 		}
 	}
 
+	var fromStatusSnapshot bool
+	if resp.Status == "unknown" {
+		snapshot, err := db.GetCachedCDKStatus(ctx, code, time.Now().Add(-lookupCacheTTL))
+		if err != nil {
+			log.Print("[lookup-cdk] status cache read failed")
+		} else if snapshot != nil {
+			fromStatusSnapshot = applyUpstreamCDKStatus(&resp, *snapshot)
+		}
+		if resp.Status == "unknown" {
+			fromStatusSnapshot = resolveUpstreamCDKStatus(ctx, code, &resp)
+		}
+		reusable = resp.Status == "unused"
+	}
+
 	if bind, berr := db.GetBindingByCDK(code); berr == nil && bind != nil {
 		if resp.AccountEmail == "" && strings.TrimSpace(bind.SessionPayload) != "" {
 			if em := extractEmailFromSession(bind.SessionPayload); em != "" {
 				resp.AccountEmail = em
 			}
 		}
-		if tok := strings.TrimSpace(bind.RedemptionToken); tok != "" {
+		if tok := strings.TrimSpace(bind.RedemptionToken); tok != "" && !fromStatusSnapshot && resp.Status != "used" {
 			cli := cardplatform.NewFromSettings()
 			st, raw, rerr := cli.Result(ctx, tok, deviceID)
 			if rerr == nil && st >= 200 && st < 300 && len(raw) > 0 {
@@ -319,9 +354,8 @@ func lookupOneCDK(ctx context.Context, code, deviceID string) cdkLookupResult {
 		}
 	}
 
-	if resp.AccountEmail != "" && resp.Status == "unused" && !resp.CanResubmit {
-		resp.Status, resp.Used = "used", true
-		resp.Message = "卡密使用成功"
+	if resp.Status == "unused" {
+		resp.CanResubmit = reusable
 	}
 	if resp.Status == "used" {
 		resp.Used = true
