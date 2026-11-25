@@ -10,6 +10,10 @@
 | **官方频道** | [https://t.me/spacex_card_visa](https://t.me/spacex_card_visa) |
 | **官方群聊 2 群** | [https://t.me/spacex_card2](https://t.me/spacex_card2) |
 
+## BOBI 商城对接
+
+商城发放 CDK，本站选卡并提交兑换，卡网按所有者 API 规则处理指定卡的资金。卡网文档原文、版本指纹和零余额卡的验证进度统一记录在[商城发码与兑换设计](https://github.com/FuYouJ/ai-services-marketplace/blob/main/docs/sales-redemption-design.md)。本站的选卡配置见[部署说明](deploy/README-release.md#chatgpt-专用卡)。
+
 ## 主要特性
 
 ✨ **用户端**
