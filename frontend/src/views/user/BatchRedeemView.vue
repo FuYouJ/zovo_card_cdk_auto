@@ -1,14 +1,26 @@
 <template>
-  <div class="u-page">
-    <UserPageHeader :eyebrow="t('hero.batchEyebrow')" :title="t('batch.title')" :subtitle="t('batch.subtitle')" />
-    <div class="u-main max-w-3xl">
+  <!-- 东方意象七主题下，整页渲染进展示外壳的批量模式（surface=recharge, mode=batch；移植自 autocard，原作者授权开源使用）。
+       其它皮肤仍是原来的 div.u-page：外层用动态组件切换，经典版输出的 DOM 不变。 -->
+  <component :is="mythicPresentation ? RedeemPresentation : 'div'" ref="presentation" v-bind="batchShellAttrs">
+    <UserPageHeader v-if="!mythicPresentation" :eyebrow="t('hero.batchEyebrow')" :title="t('batch.title')" :subtitle="t('batch.subtitle')" />
+    <div :class="mythicPresentation ? 'recharge-page' : 'u-main max-w-3xl'">
 
-      <RedeemModeTabs />
-      <p class="hint-line text-sm text-muted mb-3">{{ t('xPremium.batchHint') }}</p>
-      <p class="hint-line text-sm text-muted mb-3">{{ t('grok.batchHint') }}</p>
+      <RedeemModeTabs v-if="!mythicPresentation" />
+      <div v-else class="recharge-mode-switch mb-4">
+        <div class="flex gap-2">
+          <button type="button" class="recharge-mode-btn" :aria-pressed="false" @click="router.push('/recharge')">{{ t('rp.single') }}</button>
+          <button type="button" class="recharge-mode-btn recharge-mode-btn--active" :aria-pressed="true">{{ t('rp.batch') }}</button>
+        </div>
+      </div>
+      <p v-if="!mythicPresentation" class="hint-line text-sm text-muted mb-3">{{ t('xPremium.batchHint') }}</p>
+      <p v-if="!mythicPresentation" class="hint-line text-sm text-muted mb-3">{{ t('grok.batchHint') }}</p>
 
       <div class="card space-y-4">
-        <div class="flex items-start gap-3 pb-3 border-b bd">
+        <div v-if="mythicPresentation" class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <h3 class="text-lg font-bold text-ink">{{ t('rp.batchTitle') }}</h3>
+          <span class="rounded-full bg-soft px-3 py-1 text-xs font-semibold text-ink">{{ batchChip }}</span>
+        </div>
+        <div v-else class="flex items-start gap-3 pb-3 border-b bd">
           <div
             class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white text-[10px] font-bold leading-tight text-center"
             style="background: var(--primary)"
@@ -326,7 +338,7 @@
         </template>
       </div>
     </div>
-  </div>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -335,6 +347,11 @@ import { useI18n } from 'vue-i18n'
 import UserPageHeader from '../../components/UserPageHeader.vue'
 import RedeemModeTabs from '../../components/RedeemModeTabs.vue'
 import ExcelImportBlock from '../../components/ExcelImportBlock.vue'
+// 东方意象七主题的展示外壳（移植自 autocard，原作者授权开源使用，2026-11-17）
+import { useRouter } from 'vue-router'
+import RedeemPresentation from '../../redeem-presentation/components/RedeemPresentation.vue'
+import { batchPhase, mythicPresentation, queryCard } from '../../redeem-presentation/adapter'
+import { maskRedeemCode } from '../../redeem-presentation/utils/redeemCard'
 import { isGrokCredential } from '../../lib/grok'
 import {
   AUTO_SUBMIT_CONCURRENCY,
@@ -1144,6 +1161,35 @@ function resetAll() {
 }
 
 onUnmounted(() => stopAllPolls())
+
+// ── 东方意象展示外壳的状态映射（只读本页现有状态，不改批量流程） ──
+const router = useRouter()
+const presentation = ref<any>(null)
+const batchShellPhase = computed(() => batchPhase({
+  phase: phase.value,
+  verifying: verifying.value,
+  submitting: submitting.value || autoSubmitting.value,
+  ...stats.value,
+}))
+const batchFocusItem = computed(() => currentItem.value || items.value.find((i) => i.planLabel) || null)
+const batchShellCard = computed(() => {
+  const focus = batchFocusItem.value
+  return queryCard({
+    phase: batchShellPhase.value,
+    plan: focus?.planLabel || '',
+    identified: !!focus?.planLabel,
+    identity: focus ? maskRedeemCode(focus.cardKey) : '',
+    quantity: items.value.length || undefined,
+  })
+})
+const batchChip = computed(() => phase.value === 'input'
+  ? (parsedCdks.value.length ? t('rp.batchRecognized', { n: parsedCdks.value.length }) : t('rp.batchWaiting'))
+  : t('rp.batchStats', stats.value))
+// 外层动态组件的属性：外壳时传展示 props；经典版只给原来的 class，输出与改动前一致。
+const batchShellAttrs = computed<Record<string, unknown>>(() => mythicPresentation.value
+  ? { surface: 'recharge', mode: 'batch', workPhase: 'entry', phase: batchShellPhase.value, card: batchShellCard.value, busy: verifying.value || submitting.value || autoSubmitting.value }
+  : { class: 'u-page' })
+
 </script>
 
 <style scoped>

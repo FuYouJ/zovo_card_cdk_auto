@@ -1,5 +1,132 @@
 <template>
-  <div class="u-page">
+  <!-- 东方意象七主题：兑换页渲染进展示外壳（移植自 autocard，原作者授权开源使用）。
+       外壳提供顶栏、标题区、卡片舞台与工作台标题；这里只放本站的业务表单，状态与函数与下方经典版共用。 -->
+  <RedeemPresentation
+    v-if="mythicPresentation && step !== 2"
+    ref="publicShell"
+    surface="recharge"
+    mode="single"
+    :phase="appearancePhase"
+    :card="appearanceCard"
+    :busy="busy"
+    :work-phase="appearanceWorkPhase"
+  >
+    <!-- 1 验证卡密 -->
+    <div v-show="step === 1" class="cdk-entry card space-y-4">
+      <div class="cdk-input-row">
+        <div class="form-group">
+          <label for="recharge-cdk-code">{{ presentationCopy.inputLabel }}</label>
+          <input
+            id="recharge-cdk-code"
+            v-model="code"
+            name="recharge-cdk-code"
+            type="text"
+            autocomplete="one-time-code"
+            maxlength="120"
+            :placeholder="presentationCopy.placeholder"
+            class="work-input input mono"
+            @keydown.enter.prevent="doPreview"
+          />
+        </div>
+        <button type="button" class="cdk-verify btn-primary work-primary" :disabled="busy || !code.trim()" @click="doPreview"><span>{{ presentationCopy.verifyLabel }}</span></button>
+      </div>
+      <p class="field-hint">{{ t('m19.inputMirrorHint') }}</p>
+      <div v-if="busy" class="flex items-center gap-2 text-muted" role="status" aria-live="polite"><span class="spinner"></span>{{ t('m19.workHeading.identifyingTitle') }}</div>
+      <div v-if="error" class="alert alert-error">{{ error }}</div>
+    </div>
+
+    <!-- 3 确认兑换 -->
+    <div v-show="step === 3" class="review-entry card space-y-5">
+      <p v-if="!account.checked" class="review-intro text-sm text-subtle">{{ t('rp.noSummary') }}</p>
+      <div class="review-list rounded-xl bg-soft p-6 space-y-3">
+        <div class="flex justify-between"><span class="text-muted">{{ t('m19.reviewPlan') }}</span><span class="font-bold text-ink">{{ planLabel(targetPlan) }}</span></div>
+        <div class="flex justify-between"><span class="text-muted">{{ t('m19.reviewAccount') }}</span><span class="font-mono text-ink">{{ account.email || '—' }}</span></div>
+        <template v-if="account.checked">
+          <div class="flex justify-between"><span class="text-muted">{{ t('rp.currentPlan') }}</span><span class="text-ink">{{ planLabel(isGrok && account.currentPlan ? 'grok_' + String(account.currentPlan).replace(/^grok_/i, '') : account.currentPlan) }}</span></div>
+          <div v-if="isGrok && account.xSubscriptionType" class="flex justify-between"><span class="text-muted">{{ t('rp.xTier') }}</span><span class="text-ink">{{ account.xSubscriptionType }}</span></div>
+          <div class="flex justify-between"><span class="text-muted">{{ t('rp.subscription') }}</span><span class="text-ink">{{ subscriptionStatusText }}</span></div>
+          <div class="flex justify-between"><span class="text-muted">{{ t('rp.expiry') }}</span><span class="text-ink">{{ account.subscriptionActiveUntil ? fmtTime(account.subscriptionActiveUntil) : t('rp.upstreamMissing') }}</span></div>
+          <div class="flex justify-between"><span class="text-muted">{{ t('rp.remaining') }}</span><span class="text-ink">{{ account.subscriptionActiveUntil ? subscriptionRemaining : t('rp.upstreamMissing') }}</span></div>
+          <div class="flex justify-between"><span class="text-muted">{{ t('rp.autoRenew') }}</span><span :class="account.subscriptionWillRenew === true ? 'text-warn' : account.subscriptionWillRenew === false ? 'text-good' : 'text-ink'">{{ renewalStatusText }}</span></div>
+          <div class="flex justify-between"><span class="text-muted">{{ t('rp.lastPaymentAt') }}</span><span class="text-ink">{{ lastPaymentAtText }}</span></div>
+          <div class="flex justify-between"><span class="text-muted">{{ t('rp.lastPayment') }}</span><span class="text-ink">{{ lastPaymentText }}</span></div>
+          <div class="flex justify-between"><span class="text-muted">{{ t('rp.paymentMethod') }}</span><span class="text-ink">{{ paymentMethodText }}</span></div>
+        </template>
+      </div>
+      <div v-if="grokBlockingReason" class="alert rp-warn">{{ grokBlockingReason }}</div>
+      <div v-if="alreadySatisfied && !grokBlockingReason && !needsSubscriptionRecovery && !recoveryPending" class="alert rp-warn">{{ alreadySatisfiedHint }}</div>
+      <div v-if="needsSubscriptionRecovery || recoveryPending" class="alert rp-warn">
+        <p>{{ t(recoveryPending ? 'grace.pending' : 'grace.hint') }}</p>
+        <button v-if="needsSubscriptionRecovery && !recoveryPending" type="button" class="btn-secondary mt-3" :disabled="busy || recoveringSubscription || !preflightToken" @click="recoverGraceSubscription">{{ t(recoveringSubscription ? 'grace.processing' : 'grace.action') }}</button>
+        <button v-else type="button" class="btn-secondary mt-3" :disabled="busy || recoveringSubscription" @click="doPreflight">{{ t('grace.recheck') }}</button>
+      </div>
+      <div v-if="error" class="alert alert-error">{{ error }}</div>
+      <div class="review-cta cta-row flex gap-4">
+        <button type="button" class="work-primary btn-primary flex-1" :disabled="busy || recoveringSubscription || recoveryPending || needsSubscriptionRecovery || alreadySatisfied || !canRedeem" @click="doRedeem">
+          <span v-if="busy" class="flex items-center justify-center gap-2"><span class="spinner"></span>{{ t('rp.submitting') }}</span>
+          <span v-else>{{ alreadySatisfied ? t('rp.satisfied') : presentationCopy.confirmLabel }}</span>
+          <span aria-hidden="true">→</span>
+        </button>
+        <button type="button" class="work-guide" @click="publicShell?.openGuide()">{{ t('m19.guide') }} ↗</button>
+      </div>
+      <button type="button" class="inline-text account-return" :disabled="busy" @click="step = 2">{{ t('rp.prev') }}</button>
+    </div>
+
+    <!-- 4 兑换进度 -->
+    <section v-show="step === 4" class="task-observation result-flow rounded-xl border bd bg-soft p-4 space-y-3" data-result-flow="">
+      <p v-if="resultMessage" class="text-sm text-ink">{{ resultMessage }}</p>
+      <div class="task-facts"><span>{{ t('rp.status') }}</span><code>{{ resultStatus || '—' }}<template v-if="resultStage"> · {{ t('rp.stage', { stage: resultStage }) }}</template></code></div>
+      <div class="task-facts"><span>{{ t('rp.account') }}</span><code>{{ displayResultEmail || '—' }}</code></div>
+      <div class="task-facts"><span>{{ t('rp.card') }}</span><code>{{ resultCardLastFour ? '•••• ' + resultCardLastFour : t('rp.cardPending') }}</code></div>
+      <p class="last-observation">{{ polling ? t('rp.polling') : isTerminal(resultStatus) ? t('rp.ended') : '' }}</p>
+
+      <!-- 客户自过码（browser_native）：与经典版同一套状态与函数 -->
+      <div v-if="isNativeCaptcha" class="challenge-host">
+        <p class="challenge-description">{{ t('nativeCaptcha.prompt') }}</p>
+        <div v-if="captchaExpiresAt && !captchaTerminal" class="challenge-timer">
+          <span>{{ captchaTimedOut ? t('nativeCaptcha.timeout') : t('nativeCaptcha.countdown', { s: captchaRemainSec }) }}</span>
+          <time>{{ String(Math.floor(captchaRemainSec / 60)).padStart(2, '0') }}:{{ String(captchaRemainSec % 60).padStart(2, '0') }}</time>
+        </div>
+        <div class="challenge-actions">
+          <button type="button" class="btn-primary" :disabled="captchaDisabled" @click="startNativeCaptcha">
+            <span>{{ captchaBusy ? t('nativeCaptcha.processing') : t('nativeCaptcha.button') }}</span><span aria-hidden="true">↗</span>
+          </button>
+        </div>
+        <div v-if="captchaError" class="alert alert-error">{{ captchaError }}</div>
+      </div>
+
+      <div v-if="timeline.length" class="rp-timeline">
+        <p class="rp-timeline-title">{{ t('rp.timeline') }}</p>
+        <ol>
+          <li v-for="(ev, idx) in timeline" :key="ev.id || idx">
+            <span class="rp-dot" :style="{ background: eventDot(ev.category) }" aria-hidden="true" />
+            <div><b>{{ stepLabel(ev.step) }}</b><small>{{ fmtTime(ev.created_at) }}</small></div>
+            <p>{{ ev.public_message || ev.to_status || '—' }}</p>
+          </li>
+        </ol>
+      </div>
+      <p v-else-if="polling" class="rp-timeline-wait">{{ t('rp.waitingTimeline') }}</p>
+
+      <div v-if="error" class="alert alert-error">{{ error }}</div>
+      <div v-if="isTerminal(resultStatus) && resultStatus !== 'completed'" class="alert alert-error">{{ t('rp.failedNote') }}</div>
+      <div v-if="resultStatus === 'completed'" class="alert alert-success">{{ t('rp.successNote') }}</div>
+
+      <details class="rp-debug">
+        <summary>{{ t('rp.debug') }}</summary>
+        <pre>{{ resultPretty }}</pre>
+      </details>
+
+      <div class="task-controls">
+        <button type="button" class="work-guide" @click="publicShell?.openGuide()">{{ t('m19.guide') }} ↗</button>
+        <button type="button" class="work-primary btn-primary" @click="resetAll"><span>{{ t('rp.another') }}</span></button>
+      </div>
+    </section>
+
+    <template #workbench-footer>
+      <div v-if="step === 1" class="work-bottom"><button type="button" @click="router.push('/batch')">{{ t('rp.batch') }} ↗</button></div>
+    </template>
+  </RedeemPresentation>
+  <div v-else class="u-page">
     <UserPageHeader :eyebrow="t('hero.redeemEyebrow')" :title="t('hero.redeemTitle')" :subtitle="t('hero.redeemSub')" badges />
     <div class="u-main max-w-3xl">
       <RedeemModeTabs />
@@ -152,6 +279,20 @@
           </span>
         </div>
 
+        <!-- 客户自过码（browser_native）：支付需要在本机完成人机/3DS 验证时才出现 -->
+        <div v-if="isNativeCaptcha" class="rounded-xl border p-4 space-y-3" style="border-color: var(--warn, #d97706); background: var(--warn-soft, #fef3c7)">
+          <div class="text-sm" style="color: var(--warn, #b45309)">{{ t('nativeCaptcha.prompt') }}</div>
+          <!-- 180s 倒计时：到点禁用按钮并提示失效 -->
+          <div v-if="captchaExpiresAt && !captchaTerminal" class="text-sm font-medium" :class="captchaTimedOut ? 'text-err' : ''" style="color: var(--warn, #b45309)">
+            <template v-if="!captchaTimedOut">{{ t('nativeCaptcha.countdown', { s: captchaRemainSec }) }}</template>
+            <template v-else>{{ t('nativeCaptcha.timeout') }}</template>
+          </div>
+          <button class="btn-primary w-full" :disabled="captchaDisabled" @click="startNativeCaptcha">
+            {{ captchaBusy ? t('nativeCaptcha.processing') : t('nativeCaptcha.button') }}
+          </button>
+          <div v-if="captchaError" class="alert alert-error">{{ captchaError }}</div>
+        </div>
+
         <div class="rounded-xl bg-soft p-3 text-sm space-y-2">
           <div class="flex justify-between gap-3 items-center">
             <span class="text-muted shrink-0">兑换账号</span>
@@ -226,16 +367,23 @@
 import { isXPremiumPlan, xPremiumCredential } from '../../lib/x-premium'
 import { grokCredential, isGrokPlan } from '../../lib/grok'
 import { parseSessionJsonLenient } from '../../lib/batch-session'
+import { forceCloseStripeChallenge } from '../../lib/stripe-challenge'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import UserPageHeader from '../../components/UserPageHeader.vue'
 import RedeemModeTabs from '../../components/RedeemModeTabs.vue'
 import { dialog } from '../../lib/dialog'
 import { planLabel, planSatisfied as isSatisfied } from '../../lib/plan'
+// 东方意象七主题的展示外壳（移植自 autocard，原作者授权开源使用，2026-11-17）
+import RedeemPresentation from '../../redeem-presentation/components/RedeemPresentation.vue'
+import { mythicPresentation, rechargeCard, rechargePhase, type RechargeAppearanceInput } from '../../redeem-presentation/adapter'
+import { publicContent } from '../../redeem-presentation/utils/publicPresentation'
 
 const { t } = useI18n({ useScope: 'global' })
 const route = useRoute()
+const router = useRouter()
+const publicShell = ref<InstanceType<typeof RedeemPresentation> | null>(null)
 const steps = computed(() => [t('hero.steps.preview'), t('hero.steps.cred'), t('hero.steps.redeem'), t('hero.steps.result')])
 const step = ref(1)
 const busy = ref(false)
@@ -279,6 +427,261 @@ const timeline = ref<any[]>([])
 const polling = ref(false)
 let pollTimer: any = null
 const displayResultEmail = computed(() => resultEmail.value || account.value.email || '')
+
+// 客户自过码（browser_native，Design A）：上游 stage=native_captcha 时，
+// 让兑换者在自己浏览器里加载官方 Stripe.js 并对原 PaymentIntent 跑 handleNextAction。
+// ★clientSecret 只在内存里流转，绝不写 URL / localStorage / console★。
+//
+// ACC 契约（卡台透传）：
+//  - params.expiresAt：ms epoch，窗口 180 秒，到点即失效（未扣款）。
+//  - complete 回传 captcha:{granted,retryAllowed,attemptsLeft,exhausted,expired,piStatus}。
+//    granted=成功交付；retryAllowed=还能再试(共 1 次重试)；
+//    exhausted=两次都没过→本单终态失败(未扣款)；expired=180s 超时→终态(未扣款)。
+const captchaBusy = ref(false)
+const captchaError = ref('')
+const captchaTerminal = ref(false) // exhausted / expired：永久禁用按钮
+const captchaExpiresAt = ref(0) // ms epoch（上游 180s 窗口）
+const captchaNow = ref(Date.now())
+let captchaTimer: any = null
+// 到点强制收尾时 +1：进行中的那次验证作废，后续步骤（含回传 complete）一律不再执行。
+let captchaGen = 0
+const isNativeCaptcha = computed(
+  () => String(resultStage.value || '').toLowerCase() === 'native_captcha',
+)
+const captchaRemainSec = computed(() => {
+  if (!captchaExpiresAt.value) return 0
+  return Math.max(0, Math.ceil((captchaExpiresAt.value - captchaNow.value) / 1000))
+})
+const captchaTimedOut = computed(
+  () => captchaExpiresAt.value > 0 && captchaExpiresAt.value - captchaNow.value <= 0,
+)
+const captchaDisabled = computed(
+  () => captchaBusy.value || captchaTerminal.value || captchaTimedOut.value,
+)
+
+function startCaptchaTicker() {
+  if (captchaTimer) return
+  captchaNow.value = Date.now()
+  captchaTimer = setInterval(() => {
+    captchaNow.value = Date.now()
+    if (captchaTimedOut.value) {
+      stopCaptchaTicker()
+      if (!captchaTerminal.value) expireCaptchaNow()
+    }
+  }, 1000)
+}
+function stopCaptchaTicker() {
+  if (captchaTimer) {
+    clearInterval(captchaTimer)
+    captchaTimer = null
+  }
+}
+// 180 秒到点强制收尾：clientSecret 在 Stripe 侧不随 180 秒失效，
+// 验证浮窗还开着时兑换者点完 Stripe 照样扣款，而订单已按「未扣款」判失败。
+// 到点即移除 Stripe 验证浮窗、作废进行中的尝试、永久禁用按钮。
+function expireCaptchaNow() {
+  captchaGen++
+  forceCloseStripeChallenge()
+  stripeJsPromise = null // Stripe.js 已卸掉，下次需要时重新加载
+  captchaTerminal.value = true
+  captchaError.value = t('nativeCaptcha.timeout')
+  if (captchaBusy.value) {
+    captchaBusy.value = false
+    startPoll()
+  }
+}
+function resetCaptchaState() {
+  stopCaptchaTicker()
+  captchaBusy.value = false
+  captchaError.value = ''
+  captchaTerminal.value = false
+  captchaExpiresAt.value = 0
+}
+// expiresAt 可能是 ms 或 s；<1e12 视为秒，补成毫秒。
+function applyCaptchaExpiry(p: any) {
+  let exp = Number(p?.expiresAt ?? p?.expires_at ?? 0)
+  if (!Number.isFinite(exp) || exp <= 0) return
+  if (exp < 1e12) exp *= 1000
+  captchaExpiresAt.value = exp
+  startCaptchaTicker()
+}
+
+let stripeJsPromise: Promise<any> | null = null
+function loadStripeJs(): Promise<any> {
+  const w = window as any
+  if (w.Stripe) return Promise.resolve(w.Stripe)
+  if (stripeJsPromise) return stripeJsPromise
+  stripeJsPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector(
+      'script[src="https://js.stripe.com/v3/"]',
+    ) as HTMLScriptElement | null
+    if (existing) {
+      if (w.Stripe) return resolve(w.Stripe)
+      existing.addEventListener('load', () => resolve(w.Stripe))
+      existing.addEventListener('error', () => reject(new Error('stripe_js_load_failed')))
+      return
+    }
+    const s = document.createElement('script')
+    s.src = 'https://js.stripe.com/v3/'
+    s.async = true
+    s.onload = () => resolve(w.Stripe)
+    s.onerror = () => reject(new Error('stripe_js_load_failed'))
+    document.head.appendChild(s)
+  })
+  return stripeJsPromise
+}
+
+async function fetchCaptchaParams(): Promise<{ ok: boolean; p: any; msg?: string }> {
+  const tok = redemptionToken.value
+  const url = tok
+    ? '/api/v1/public/cdk/native-captcha/params?token=' + encodeURIComponent(tok)
+    : '/api/v1/public/cdk/native-captcha/params?code=' + encodeURIComponent(code.value.trim())
+  const { r, data } = await api(url)
+  if (!r.ok) return { ok: false, p: null, msg: data?.error || data?.msg || data?.message }
+  return { ok: true, p: (data && (data.data || data)) || {} }
+}
+
+// 进入 native_captcha 阶段后，预取一次仅为驱动倒计时；不保留 clientSecret（局部变量即弃）。
+async function prefetchCaptchaExpiry() {
+  try {
+    const res = await fetchCaptchaParams()
+    if (res.ok) applyCaptchaExpiry(res.p)
+  } catch {
+    /* best-effort：取不到就等用户点按钮时再取 */
+  }
+}
+
+watch(
+  isNativeCaptcha,
+  (v) => {
+    if (v) {
+      if (!captchaExpiresAt.value && !captchaTerminal.value) void prefetchCaptchaExpiry()
+    } else {
+      stopCaptchaTicker()
+    }
+  },
+  { immediate: true },
+)
+
+// 读 complete 回传的 captcha 判定，驱动按钮/提示状态。
+// ★卡台把判定【平铺】进 data（granted/retry_allowed/attempts_left/exhausted/expired），不是嵌套 captcha 对象★，
+// 且用 snake_case；这里读平铺并兼容 camelCase，避免对不上导致整段被跳过。
+function handleCaptchaResult(cdata: any) {
+  const d = (cdata && (cdata.data || cdata)) || null
+  if (!d || typeof d !== 'object') return
+  const granted = d.granted
+  const exhausted = d.exhausted
+  const expired = d.expired
+  const retryAllowed = d.retry_allowed ?? d.retryAllowed
+  const attemptsLeft = d.attempts_left ?? d.attemptsLeft
+  // 旧卡台无这些字段（全 undefined）：交给轮询收敛
+  if (granted === undefined && exhausted === undefined && expired === undefined && retryAllowed === undefined) return
+  if (granted) {
+    captchaError.value = ''
+    return
+  }
+  if (exhausted) {
+    captchaTerminal.value = true
+    stopCaptchaTicker()
+    captchaError.value = t('nativeCaptcha.exhausted')
+    return
+  }
+  if (expired) {
+    captchaTerminal.value = true
+    stopCaptchaTicker()
+    captchaError.value = t('nativeCaptcha.expiredResult')
+    return
+  }
+  if (retryAllowed) {
+    const n = Number(attemptsLeft)
+    captchaError.value =
+      Number.isFinite(n) && n > 0 ? t('nativeCaptcha.retry', { n }) : t('nativeCaptcha.failed')
+    return
+  }
+  // 无明确标志：不改按钮，等轮询
+}
+
+async function startNativeCaptcha() {
+  if (captchaDisabled.value) return
+  const gen = captchaGen
+  const stale = () => gen !== captchaGen // 已到点强制收尾：本次尝试作废
+  captchaError.value = ''
+  captchaBusy.value = true
+  // 过码期间暂停轮询，避免状态来回跳；结束后 startPoll() 恢复。
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+  polling.value = false
+  try {
+    const tok = redemptionToken.value
+    const params = await fetchCaptchaParams()
+    if (stale()) return
+    if (!params.ok) {
+      captchaError.value = params.msg || t('nativeCaptcha.loadFailed')
+      return
+    }
+    const p = params.p
+    applyCaptchaExpiry(p)
+    if (captchaTimedOut.value) {
+      captchaError.value = t('nativeCaptcha.timeout')
+      return
+    }
+    const pk = String(p.publishableKey || p.publishable_key || '')
+    const clientSecret = String(p.clientSecret || p.client_secret || '')
+    const piId = String(p.paymentIntentId || p.payment_intent_id || '')
+    if (!pk || !clientSecret) {
+      captchaError.value = t('nativeCaptcha.loadFailed')
+      return
+    }
+    const StripeCtor = await loadStripeJs()
+    if (stale()) return
+    if (typeof StripeCtor !== 'function') {
+      captchaError.value = t('nativeCaptcha.loadFailed')
+      return
+    }
+    const stripe = StripeCtor(pk)
+    // 本地跑 handleNextAction；无论本地成功/报错，都回传 complete，
+    // 由卡台(ACC)按 PI 真相计数（这是尝试次数/granted 的唯一真相源）。
+    try {
+      const retrieved = await stripe.retrievePaymentIntent(clientSecret)
+      if (stale()) return
+      const pi = retrieved?.paymentIntent
+      if (pi && piId && pi.id !== piId) {
+        // 安全中止：PI 不匹配不回传，不计失败次数。
+        captchaError.value = t('nativeCaptcha.mismatch')
+        return
+      }
+      if (pi && (pi.status === 'requires_action' || pi.status === 'requires_source_action')) {
+        if (captchaTimedOut.value) return expireCaptchaNow()
+        await stripe.handleNextAction({ clientSecret })
+        if (stale()) return
+        await stripe.retrievePaymentIntent(clientSecret)
+      }
+    } catch {
+      /* 本地异常也回传 complete，由卡台核验 PI 真相 */
+    }
+    if (stale()) return
+    // 回传卡台推进订单（只带 token/code，绝不带 clientSecret）
+    const { data: cdata } = await api('/api/v1/public/cdk/native-captcha/complete', {
+      method: 'POST',
+      body: JSON.stringify(tok ? { token: tok } : { code: code.value.trim() }),
+    })
+    if (stale()) return
+    handleCaptchaResult(cdata)
+  } catch (e: any) {
+    if (stale()) return
+    captchaError.value = e && e.message ? String(e.message) : t('nativeCaptcha.failed')
+  } finally {
+    // 已到点强制收尾的尝试：expireCaptchaNow 已复位按钮并恢复轮询，这里不再动
+    if (!stale()) {
+      captchaBusy.value = false
+      // 恢复轮询，让后续状态（completed / declined 等）正常收敛；
+      // 终态(exhausted/expired)按钮由 captchaDisabled 维持禁用，不受轮询影响。
+      startPoll()
+    }
+  }
+}
 
 const PROGRESS_KEY = 'cdk_redeem_progress_v1'
 const nowTick = ref(Date.now())
@@ -714,6 +1117,7 @@ async function api(path: string, init: RequestInit = {}) {
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
   if (nowTimer) clearInterval(nowTimer)
+  stopCaptchaTicker()
 })
 
 /** 完整 Session：必须含 sessionToken（JWE）；禁止纯 AT */
@@ -984,7 +1388,38 @@ function resetAll() {
   resultCardLastFour.value = ''
   timeline.value = []
   polling.value = false
+  resetCaptchaState()
 }
+
+// ── 东方意象展示外壳的状态映射（只读本页现有状态，不改业务流程） ──
+const presentationCopy = computed(() => publicContent.value!.copy)
+const appearanceVerifyStart = ref<number | null>(null)
+watch(busy, (on) => { if (on && step.value === 1) appearanceVerifyStart.value = Date.now() })
+function parseTime(v: unknown): number | null {
+  const ms = Date.parse(String(v || ''))
+  return Number.isFinite(ms) ? ms : null
+}
+const appearanceInput = computed<RechargeAppearanceInput>(() => {
+  const order = resultBody.value?.order || resultBody.value?.data?.order || resultBody.value?.data || resultBody.value || {}
+  return {
+    step: step.value,
+    busy: busy.value,
+    code: code.value,
+    plan: targetPlan.value,
+    identified: !!previewInfo.value,
+    resultStatus: resultStatus.value,
+    terminal: isTerminal(resultStatus.value),
+    needsAction: isNativeCaptcha.value && !captchaTerminal.value && !captchaTimedOut.value,
+    email: account.value.email || resultEmail.value,
+    orderId: String(order.order_no || order.order_id || order.id || ''),
+    createdAt: parseTime(order.created_at),
+    completedAt: isTerminal(resultStatus.value) ? parseTime(order.completed_at || order.finished_at || order.updated_at) : null,
+    verificationStartedAt: appearanceVerifyStart.value,
+  }
+})
+const appearancePhase = computed(() => rechargePhase(appearanceInput.value))
+const appearanceCard = computed(() => rechargeCard(appearanceInput.value, appearancePhase.value))
+const appearanceWorkPhase = computed(() => step.value === 1 ? 'entry' : step.value === 2 ? 'credentials' : step.value === 3 ? 'review' : isNativeCaptcha.value ? 'challenge' : 'task')
 </script>
 
 <style scoped>
@@ -1017,4 +1452,22 @@ function resetAll() {
 @media (max-width: 640px) {
   .account-facts { grid-template-columns: 1fr; }
 }
+</style>
+
+<style scoped>
+/* 东方意象展示外壳里本站独有的块（原项目没有对应结构）：沿用外壳工作台的 --w-* 色板与细线风格 */
+.rp-second-label { display: block; margin-top: 14px !important; }
+.rp-warn { border-left-color: color-mix(in srgb, var(--w-warn, #d8c59b) 70%, transparent) !important; color: var(--w-ink); }
+.rp-timeline { margin-top: 18px; border-top: 1px solid var(--w-line); padding-top: 12px; }
+.rp-timeline-title, .rp-timeline-wait { font-size: 11px; color: var(--w-muted); margin: 0 0 10px; }
+.rp-timeline ol { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--w-line); }
+.rp-timeline li { position: relative; padding: 0 0 12px; }
+.rp-timeline .rp-dot { position: absolute; left: -18px; top: 6px; width: 7px; height: 7px; border-radius: 50%; }
+.rp-timeline li > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.rp-timeline b { font-size: 12px; font-weight: 500; color: var(--w-ink); }
+.rp-timeline small { font-size: 10px; color: var(--w-muted); font-family: ui-monospace, monospace; }
+.rp-timeline li > p { margin: 2px 0 0; font-size: 11px; line-height: 1.7; color: var(--w-muted); }
+.rp-debug { margin-top: 14px; font-size: 10px; color: var(--w-muted); }
+.rp-debug summary { cursor: pointer; user-select: none; }
+.rp-debug pre { margin-top: 8px; max-height: 12rem; overflow: auto; padding: 10px; border: 1px solid var(--w-line); border-radius: 7px; background: var(--w-input); color: var(--w-ink); font-size: 10px; }
 </style>

@@ -2,13 +2,16 @@
 
 一个现代化的 CDK 激活码充值系统，支持虚拟货币兑换。用户可以通过输入 CDK 码快速充值，管理员可以批量发放 CDK 和审核充值申请。
 
+![CDK 充值系统 · 兑换页](docs/recharge-portal.png)
+
 ## 官方入口
 
 | 类型 | 链接 |
 |------|------|
 | **卡台官网** | [https://zovocard.com](https://zovocard.com) |
-| **官方频道** | [https://t.me/spacex_card_visa](https://t.me/spacex_card_visa) |
-| **官方群聊 2 群** | [https://t.me/spacex_card2](https://t.me/spacex_card2) |
+| **样板站（在线演示）** | [https://gptcdk.ai](https://gptcdk.ai) |
+| **官方频道** | [https://t.me/zovo_card_tz](https://t.me/zovo_card_tz) |
+
 
 ## BOBI 商城对接
 

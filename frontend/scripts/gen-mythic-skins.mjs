@@ -87,5 +87,5 @@ for (const [id, p] of Object.entries(MYTHIC_SCENES)) {
   css += '\n'
 }
 const out = fileURLToPath(new URL('../src/styles/mythic-skins.css', import.meta.url))
-writeFileSync(out, css.trimEnd() + '\n')
+writeFileSync(out, css)
 console.log('wrote', out)
