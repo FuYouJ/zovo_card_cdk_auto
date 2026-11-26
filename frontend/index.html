@@ -27,12 +27,19 @@
             (mode === 'auto' &&
               window.matchMedia &&
               window.matchMedia('(prefers-color-scheme: dark)').matches)
-          // preferDark 皮肤默认暗色，减少首屏闪白
-          if (skin === 'cyber' || skin === 'ember' || skin === 'noir') dark = true
+          // 皮肤的「默认暗色 / 后台布局」由 theme.ts 每次应用皮肤时写进 site-skin-boot，这里只读，
+          // 不再在这里另写一份皮肤清单（以前两处要同步改，漏改首屏就闪错样式）。
+          var boot = null
+          try { boot = JSON.parse(localStorage.getItem('site-skin-boot') || 'null') } catch (e) {}
+          if (!boot || boot.skin !== skin) boot = null
+          if (boot && boot.preferDark) dark = true
           if (dark) document.documentElement.classList.add('dark')
           document.documentElement.setAttribute('data-skin', skin)
-          var layoutMap = { cyber: 'sidebar', slate: 'rail' }
-          document.documentElement.setAttribute('data-layout', layoutMap[skin] || 'top')
+          document.documentElement.setAttribute('data-layout', (boot && boot.layout) || 'top')
+          if (boot && boot.family) document.documentElement.setAttribute('data-family', boot.family)
+          // 管理端(/ops)：不透明面板、静态氛围、完整 Element Plus 配色映射（见 styles/admin.css）。
+          // 首屏就标上，避免样式表到达后再切一次造成闪动/位移。
+          if (location.pathname === '/ops' || location.pathname.indexOf('/ops/') === 0) document.documentElement.setAttribute('data-area', 'admin')
         } catch (e) {}
       })()
     </script>

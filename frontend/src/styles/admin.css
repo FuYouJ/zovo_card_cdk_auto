@@ -1,0 +1,699 @@
+/* ══════════════════════════════════════════════════════════════════════
+   管理端（/ops）专用层：只在 html[data-area='admin'] 下生效（router/index.ts 与 index.html 首屏脚本负责打标）。
+   用户页不受影响。
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. 不透明面板，无背景模糊 ─────────────────────────────────────────────
+   玻璃质感皮肤（zovo 夜间、ocean、forest、东方意象七主题）的 --surface 是半透明的，
+   东方意象还给每个 .card 加了 backdrop-filter。后台满屏是表格和卡片，模糊层叠在
+   氛围画布上会让每一帧都重算整页模糊。后台一律用各皮肤自带的不透明面板色。
+   写在 body 上而不是 html：html 上的 --surface-solid 默认就是 var(--surface)，
+   同一元素上互相引用会成环；body 继承的是 html 已解析好的值，不会。 */
+html[data-area='admin'] body {
+  --surface: var(--surface-solid);
+}
+html[data-area='admin'][data-family='mythic'] body {
+  --card-bg: var(--surface-solid);
+}
+html[data-area='admin'] .card,
+html[data-area='admin'] .el-card {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ── 2. 轻量状态徽标（代替表格行里的 el-tag：每行少两个组件实例）──────────── */
+html[data-area='admin'] .badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+}
+html[data-area='admin'] .badge--good, html[data-area='admin'] .badge--success { color: var(--good); background: var(--good-soft); border-color: color-mix(in srgb, var(--good) 28%, transparent); }
+html[data-area='admin'] .badge--warn, html[data-area='admin'] .badge--warning { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 28%, transparent); }
+html[data-area='admin'] .badge--err, html[data-area='admin'] .badge--danger { color: var(--err); background: var(--err-soft); border-color: color-mix(in srgb, var(--err) 28%, transparent); }
+html[data-area='admin'] .badge--info { color: var(--ink-2); }
+html[data-area='admin'] .badge--primary { color: var(--primary); background: var(--primary-soft); border-color: color-mix(in srgb, var(--primary) 28%, transparent); }
+
+/* ── 3. Element Plus 完整配色映射（后台）────────────────────────────────────
+   theme.ts 只在 html 上内联了一小部分 --el-*（主色阶梯按 SKINS 里的 primary 算，和 CSS 里各皮肤
+   实际的 --primary 并不总是一致，如 ocean）；其余（成功/警告/危险/信息阶梯、填充、边框、表格、阴影…）
+   全落回 Element Plus 默认的蓝灰色，暗色皮肤下下拉、标签、分页、开关都是一块块亮斑。
+   这里按皮肤 token 全量映射：
+   - 写在 html 和 body 两处：html 上的值用 html 的 --surface（可能半透明）解析，body 上重新解析为
+     不透明面板色；body 挂载的弹层（下拉 / 弹窗 / 抽屉 / 消息）在 body 里，读到的是 body 的值。
+   - !important：为了压过 theme.ts 在 html 上的内联值（用户页仍用内联值，外观不变）。
+   - 阶梯用 color-mix 往「不透明面板色」混，而不是固定往白/黑混：亮暗皮肤自然各得其所；
+     「dark-2」往 --ink（亮皮肤近黑、暗皮肤近白）混，暗色下悬停是变亮而不是变暗。 */
+html[data-area='admin'],
+html[data-area='admin'] body {
+  --adm-base: var(--surface-solid);
+  --adm-sunken: color-mix(in srgb, var(--ink) 5%, var(--surface-solid));
+  --adm-sunken-2: color-mix(in srgb, var(--ink) 9%, var(--surface-solid));
+  --adm-hover: color-mix(in srgb, var(--primary) 9%, var(--surface-solid));
+  --adm-stripe: color-mix(in srgb, var(--ink) 2.5%, var(--surface-solid));
+
+  --el-color-white: #ffffff !important;
+  --el-color-black: #000000 !important;
+
+  --el-color-primary: var(--primary) !important;
+  --el-color-primary-light-3: color-mix(in srgb, var(--primary) 70%, var(--adm-base)) !important;
+  --el-color-primary-light-5: color-mix(in srgb, var(--primary) 50%, var(--adm-base)) !important;
+  --el-color-primary-light-7: color-mix(in srgb, var(--primary) 30%, var(--adm-base)) !important;
+  --el-color-primary-light-8: color-mix(in srgb, var(--primary) 20%, var(--adm-base)) !important;
+  --el-color-primary-light-9: color-mix(in srgb, var(--primary) 10%, var(--adm-base)) !important;
+  --el-color-primary-dark-2: color-mix(in srgb, var(--primary) 80%, var(--ink)) !important;
+
+  --el-color-success: var(--good) !important;
+  --el-color-success-light-3: color-mix(in srgb, var(--good) 70%, var(--adm-base)) !important;
+  --el-color-success-light-5: color-mix(in srgb, var(--good) 50%, var(--adm-base)) !important;
+  --el-color-success-light-7: color-mix(in srgb, var(--good) 30%, var(--adm-base)) !important;
+  --el-color-success-light-8: color-mix(in srgb, var(--good) 20%, var(--adm-base)) !important;
+  --el-color-success-light-9: color-mix(in srgb, var(--good) 10%, var(--adm-base)) !important;
+  --el-color-success-dark-2: color-mix(in srgb, var(--good) 80%, var(--ink)) !important;
+
+  --el-color-warning: var(--warn) !important;
+  --el-color-warning-light-3: color-mix(in srgb, var(--warn) 70%, var(--adm-base)) !important;
+  --el-color-warning-light-5: color-mix(in srgb, var(--warn) 50%, var(--adm-base)) !important;
+  --el-color-warning-light-7: color-mix(in srgb, var(--warn) 30%, var(--adm-base)) !important;
+  --el-color-warning-light-8: color-mix(in srgb, var(--warn) 20%, var(--adm-base)) !important;
+  --el-color-warning-light-9: color-mix(in srgb, var(--warn) 10%, var(--adm-base)) !important;
+  --el-color-warning-dark-2: color-mix(in srgb, var(--warn) 80%, var(--ink)) !important;
+
+  --el-color-danger: var(--err) !important;
+  --el-color-danger-light-3: color-mix(in srgb, var(--err) 70%, var(--adm-base)) !important;
+  --el-color-danger-light-5: color-mix(in srgb, var(--err) 50%, var(--adm-base)) !important;
+  --el-color-danger-light-7: color-mix(in srgb, var(--err) 30%, var(--adm-base)) !important;
+  --el-color-danger-light-8: color-mix(in srgb, var(--err) 20%, var(--adm-base)) !important;
+  --el-color-danger-light-9: color-mix(in srgb, var(--err) 10%, var(--adm-base)) !important;
+  --el-color-danger-dark-2: color-mix(in srgb, var(--err) 80%, var(--ink)) !important;
+  --el-color-error: var(--err) !important;
+  --el-color-error-light-3: var(--el-color-danger-light-3) !important;
+  --el-color-error-light-5: var(--el-color-danger-light-5) !important;
+  --el-color-error-light-7: var(--el-color-danger-light-7) !important;
+  --el-color-error-light-8: var(--el-color-danger-light-8) !important;
+  --el-color-error-light-9: var(--el-color-danger-light-9) !important;
+  --el-color-error-dark-2: var(--el-color-danger-dark-2) !important;
+
+  /* Element Plus 的 info 是「中性灰」（已消耗 / 仅前缀这类），不是皮肤里偏蓝的 --info */
+  --el-color-info: var(--ink-3) !important;
+  --el-color-info-light-3: color-mix(in srgb, var(--ink-3) 70%, var(--adm-base)) !important;
+  --el-color-info-light-5: color-mix(in srgb, var(--ink-3) 50%, var(--adm-base)) !important;
+  --el-color-info-light-7: color-mix(in srgb, var(--ink-3) 30%, var(--adm-base)) !important;
+  --el-color-info-light-8: color-mix(in srgb, var(--ink-3) 20%, var(--adm-base)) !important;
+  --el-color-info-light-9: color-mix(in srgb, var(--ink-3) 10%, var(--adm-base)) !important;
+  --el-color-info-dark-2: color-mix(in srgb, var(--ink-3) 80%, var(--ink)) !important;
+
+  --el-bg-color: var(--surface-solid) !important;
+  --el-bg-color-page: var(--bg) !important;
+  --el-bg-color-overlay: var(--surface-solid) !important;
+
+  --el-text-color-primary: var(--ink) !important;
+  --el-text-color-regular: var(--ink-2) !important;
+  --el-text-color-secondary: var(--ink-3) !important;
+  --el-text-color-placeholder: color-mix(in srgb, var(--ink-3) 85%, var(--adm-base)) !important;
+  --el-text-color-disabled: color-mix(in srgb, var(--ink-3) 60%, var(--adm-base)) !important;
+
+  --el-border-color: var(--brd) !important;
+  --el-border-color-light: var(--brd) !important;
+  --el-border-color-lighter: var(--brd) !important;
+  --el-border-color-extra-light: color-mix(in srgb, var(--brd) 60%, transparent) !important;
+  --el-border-color-dark: var(--brd-2) !important;
+  --el-border-color-darker: var(--brd-2) !important;
+  --el-border-color-hover: var(--brd-2) !important;
+
+  --el-fill-color: var(--adm-sunken) !important;
+  --el-fill-color-light: color-mix(in srgb, var(--ink) 4%, var(--adm-base)) !important;
+  --el-fill-color-lighter: var(--adm-stripe) !important;
+  --el-fill-color-extra-light: color-mix(in srgb, var(--ink) 1.5%, var(--adm-base)) !important;
+  --el-fill-color-dark: var(--adm-sunken-2) !important;
+  --el-fill-color-darker: color-mix(in srgb, var(--ink) 13%, var(--adm-base)) !important;
+  --el-fill-color-blank: var(--surface-solid) !important;
+
+  --el-box-shadow: var(--shadow) !important;
+  --el-box-shadow-light: var(--shadow-sm) !important;
+  --el-box-shadow-lighter: var(--shadow-sm) !important;
+  --el-box-shadow-dark: var(--shadow) !important;
+
+  --el-mask-color: rgba(0, 0, 0, 0.42) !important;
+  --el-mask-color-extra-light: rgba(0, 0, 0, 0.2) !important;
+  --el-overlay-color: rgba(0, 0, 0, 0.6) !important;
+  --el-overlay-color-light: rgba(0, 0, 0, 0.5) !important;
+  --el-overlay-color-lighter: rgba(0, 0, 0, 0.42) !important;
+
+  --el-font-family: var(--font-sans) !important;
+  --el-border-radius-base: var(--radius-md) !important;
+  --el-border-radius-small: calc(var(--radius-md) * 0.66) !important;
+}
+html.dark[data-area='admin'],
+html.dark[data-area='admin'] body,
+html[data-area='admin'][data-skin='cyber'],
+html[data-area='admin'][data-skin='cyber'] body,
+html[data-area='admin'][data-skin='ember'],
+html[data-area='admin'][data-skin='ember'] body,
+html[data-area='admin'][data-skin='noir'],
+html[data-area='admin'][data-skin='noir'] body {
+  --el-mask-color: rgba(0, 0, 0, 0.62) !important;
+  --el-overlay-color-lighter: rgba(0, 0, 0, 0.62) !important;
+  --adm-hover: color-mix(in srgb, var(--primary) 12%, var(--surface-solid));
+}
+
+/* 主色上的文字/图标：勾选框对勾、选中的分段按钮、带底色分页的当前页——默认是写死的白色，
+   金色/青色/白色主色的皮肤上会看不清，统一用皮肤的 --primary-on */
+html[data-area='admin'] .el-checkbox { --el-checkbox-checked-icon-color: var(--primary-on); }
+html[data-area='admin'] .el-radio-button { --el-radio-button-checked-text-color: var(--primary-on); }
+html[data-area='admin'] .el-pagination.is-background .el-pager li.is-active { color: var(--primary-on); }
+html[data-area='admin'] .el-tag--dark { --el-tag-text-color: var(--primary-on); }
+html[data-area='admin'] .el-switch { --el-switch-on-color: var(--primary); --el-switch-off-color: var(--adm-sunken-2); }
+
+/* ── 4. 表格：不透明底（固定列是 sticky，透明的话滚动时下面的内容会透出来）── */
+html[data-area='admin'] .el-table {
+  --el-table-bg-color: var(--surface-solid);
+  --el-table-tr-bg-color: var(--surface-solid);
+  --el-table-expanded-cell-bg-color: var(--surface-solid);
+  --el-table-header-bg-color: var(--adm-sunken);
+  --el-table-header-text-color: var(--ink-3);
+  --el-table-text-color: var(--ink);
+  --el-table-row-hover-bg-color: var(--adm-hover);
+  --el-table-current-row-bg-color: var(--adm-hover);
+  --el-table-border-color: var(--brd);
+  --el-table-fixed-box-shadow: none;
+  --el-table-fixed-left-column: inset 10px 0 10px -10px color-mix(in srgb, var(--ink) 18%, transparent);
+  --el-table-fixed-right-column: inset -10px 0 10px -10px color-mix(in srgb, var(--ink) 18%, transparent);
+  background: var(--surface-solid);
+  color: var(--ink);
+}
+/* 压过 style.css 里暗色 / zovo 用半透明 --surface-2 的 !important 表头 */
+html[data-area='admin'] .el-table th.el-table__cell,
+html.dark[data-area='admin'] .el-table th.el-table__cell,
+html[data-area='admin'][data-skin] .el-table th.el-table__cell {
+  background: var(--el-table-header-bg-color) !important;
+  color: var(--el-table-header-text-color) !important;
+}
+html[data-area='admin'] .el-table__body tr:hover > td.el-table__cell,
+html.dark[data-area='admin'] .el-table__body tr:hover > td.el-table__cell {
+  background: var(--el-table-row-hover-bg-color) !important;
+}
+html[data-area='admin'] .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell,
+html.dark[data-area='admin'] .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: var(--adm-stripe);
+}
+html[data-area='admin'] .el-table--striped .el-table__body tr.el-table__row--striped:hover td.el-table__cell {
+  background: var(--el-table-row-hover-bg-color) !important;
+}
+html[data-area='admin'] .el-table__body tr.el-table__row.is-selected-row > td.el-table__cell {
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface-solid));
+}
+html[data-area='admin'] .el-table .el-table__empty-text { color: var(--ink-3); }
+html[data-area='admin'] .el-table .el-table__inner-wrapper::before { background-color: var(--brd); }
+
+/* ── 5. 输入 / 下拉 / 弹层 ───────────────────────────────────────────────── */
+html[data-area='admin'] .el-input__wrapper,
+html[data-area='admin'] .el-textarea__inner,
+html[data-area='admin'] .el-select__wrapper {
+  background: var(--surface-solid) !important;
+  box-shadow: 0 0 0 1px var(--brd) inset !important;
+}
+html[data-area='admin'] .el-input__wrapper:hover,
+html[data-area='admin'] .el-select__wrapper:hover { box-shadow: 0 0 0 1px var(--brd-2) inset !important; }
+html[data-area='admin'] .el-input__wrapper.is-focus,
+html[data-area='admin'] .el-select__wrapper.is-focused,
+html[data-area='admin'] .el-textarea__inner:focus {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 70%, transparent) inset, 0 0 0 3px var(--primary-soft) !important;
+}
+html[data-area='admin'] .el-input.is-disabled .el-input__wrapper { background: var(--adm-sunken) !important; }
+html[data-area='admin'] .el-input-group__append,
+html[data-area='admin'] .el-input-group__prepend { background: var(--adm-sunken); color: var(--ink-2); box-shadow: 0 0 0 1px var(--brd) inset; }
+html[data-area='admin'] .el-input__inner::placeholder,
+html[data-area='admin'] .el-textarea__inner::placeholder { color: var(--el-text-color-placeholder); }
+html[data-area='admin'] .el-select__placeholder.is-transparent { color: var(--el-text-color-placeholder); }
+
+html[data-area='admin'] .el-popper.is-light,
+html[data-area='admin'] .el-dropdown__popper.el-popper,
+html[data-area='admin'] .el-select__popper.el-popper {
+  background: var(--surface-solid);
+  border: 1px solid var(--brd-2);
+  box-shadow: var(--shadow);
+}
+html[data-area='admin'] .el-popper.is-light .el-popper__arrow::before,
+html[data-area='admin'] .el-dropdown__popper .el-popper__arrow::before,
+html[data-area='admin'] .el-select__popper .el-popper__arrow::before {
+  background: var(--surface-solid) !important;
+  border-color: var(--brd-2) !important;
+}
+html[data-area='admin'] .el-dropdown-menu { background: var(--surface-solid) !important; padding: 4px; }
+html[data-area='admin'] .el-dropdown-menu__item {
+  color: var(--ink-2);
+  border-radius: calc(var(--radius-md) * 0.6);
+  padding: 6px 12px;
+  line-height: 20px;
+}
+html[data-area='admin'] .el-dropdown-menu__item:not(.is-disabled):hover,
+html[data-area='admin'] .el-dropdown-menu__item:not(.is-disabled):focus {
+  background: var(--adm-hover) !important;
+  color: var(--ink) !important;
+}
+html[data-area='admin'] .el-dropdown-menu__item.is-disabled { color: var(--el-text-color-disabled); }
+html[data-area='admin'] .el-dropdown-menu__item--divided { border-top-color: var(--brd); }
+html[data-area='admin'] .el-dropdown-menu__item.is-danger { color: var(--err); }
+html[data-area='admin'] .el-dropdown-menu__item.is-danger:not(.is-disabled):hover { background: var(--err-soft) !important; color: var(--err) !important; }
+html[data-area='admin'] .el-select-dropdown__item { color: var(--ink-2); }
+html[data-area='admin'] .el-select-dropdown__item.is-hovering { background: var(--adm-hover); color: var(--ink); }
+html[data-area='admin'] .el-select-dropdown__item.is-selected { color: var(--primary); font-weight: 600; }
+
+html[data-area='admin'] .el-dialog,
+html[data-area='admin'] .el-drawer,
+html[data-area='admin'] .el-message-box {
+  background: var(--surface-solid) !important;
+  border: 1px solid var(--brd);
+  color: var(--ink);
+}
+html[data-area='admin'] .el-drawer__header { color: var(--ink); margin-bottom: 12px; }
+html[data-area='admin'] .el-drawer__title { font-family: var(--font-display, var(--font-sans)); font-weight: 700; color: var(--ink); }
+html[data-area='admin'] .el-descriptions__body { background: var(--surface-solid); color: var(--ink); }
+html[data-area='admin'] .el-descriptions__label.is-bordered-label { background: var(--adm-sunken); color: var(--ink-3); font-weight: 500; }
+html[data-area='admin'] .el-descriptions__cell { border-color: var(--brd) !important; }
+
+html[data-area='admin'] .el-alert--warning.is-light { background: var(--warn-soft); color: var(--warn); }
+html[data-area='admin'] .el-alert--info.is-light { background: var(--adm-sunken); color: var(--ink-2); }
+html[data-area='admin'] .el-alert--success.is-light { background: var(--good-soft); color: var(--good); }
+html[data-area='admin'] .el-alert--error.is-light { background: var(--err-soft); color: var(--err); }
+html[data-area='admin'] .el-alert__description { color: inherit; }
+
+html[data-area='admin'] .el-tag { --el-tag-border-radius: 6px; }
+html[data-area='admin'] .el-tag.el-tag--info { --el-tag-text-color: var(--ink-2); }
+
+html[data-area='admin'] .el-pagination {
+  --el-pagination-bg-color: transparent;
+  --el-pagination-text-color: var(--ink-2);
+  --el-pagination-button-color: var(--ink-2);
+  --el-pagination-button-disabled-color: var(--el-text-color-disabled);
+  --el-pagination-button-disabled-bg-color: transparent;
+  --el-pagination-hover-color: var(--primary);
+  color: var(--ink-2);
+}
+html[data-area='admin'] .el-pagination.is-background .btn-prev,
+html[data-area='admin'] .el-pagination.is-background .btn-next,
+html[data-area='admin'] .el-pagination.is-background .el-pager li:not(.is-active) {
+  background: var(--adm-sunken) !important;
+  color: var(--ink-2);
+}
+html[data-area='admin'] .el-pagination.is-background .el-pager li.is-active {
+  background: var(--primary) !important;
+  color: var(--primary-on) !important;
+}
+html[data-area='admin'] .el-pagination.is-background .btn-prev:disabled,
+html[data-area='admin'] .el-pagination.is-background .btn-next:disabled { color: var(--el-text-color-disabled); }
+
+html[data-area='admin'] .el-input-number__decrease,
+html[data-area='admin'] .el-input-number__increase { background: var(--adm-sunken); color: var(--ink-2); border-color: var(--brd) !important; }
+html[data-area='admin'] .el-input-number__decrease:hover,
+html[data-area='admin'] .el-input-number__increase:hover { color: var(--primary); }
+
+html[data-area='admin'] .el-checkbox__inner { background: var(--surface-solid); border-color: var(--brd-2); }
+html[data-area='admin'] .el-checkbox__input.is-checked .el-checkbox__inner,
+html[data-area='admin'] .el-checkbox__input.is-indeterminate .el-checkbox__inner { background: var(--primary); border-color: var(--primary); }
+html[data-area='admin'] .el-checkbox__input.is-indeterminate .el-checkbox__inner::before { background-color: var(--primary-on); }
+html[data-area='admin'] .el-checkbox__label { color: var(--ink-2); }
+html[data-area='admin'] .el-checkbox__input.is-checked + .el-checkbox__label { color: var(--ink); }
+
+html[data-area='admin'] .el-radio-button__inner { background: var(--surface-solid); color: var(--ink-2); border-color: var(--brd); }
+html[data-area='admin'] .el-radio-button:first-child .el-radio-button__inner { border-left-color: var(--brd); }
+html[data-area='admin'] .el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background: var(--primary) !important;
+  border-color: var(--primary) !important;
+  color: var(--primary-on) !important;
+  box-shadow: -1px 0 0 0 var(--primary) !important;
+}
+
+html[data-area='admin'] .el-empty { --el-empty-description-color: var(--ink-3); }
+html[data-area='admin'] .el-result__title p { color: var(--ink); }
+html[data-area='admin'] .el-result__subtitle p { color: var(--ink-2); }
+html[data-area='admin'] .el-loading-mask { background-color: color-mix(in srgb, var(--surface-solid) 70%, transparent); }
+html[data-area='admin'] .el-scrollbar { --el-scrollbar-bg-color: var(--ink-3); --el-scrollbar-hover-bg-color: var(--ink-2); }
+html[data-area='admin'] .el-form-item__label { color: var(--ink-2); }
+html[data-area='admin'] .el-popover.el-popper { color: var(--ink); }
+html[data-area='admin'] .el-popper.is-dark { background: var(--ink); color: var(--surface-solid); border-color: var(--ink); }
+
+/* 非 EP 原件：页面级滚动条跟主题 */
+html[data-area='admin'] { scrollbar-color: color-mix(in srgb, var(--ink-3) 55%, transparent) transparent; }
+
+/* ── 6. 版式原件（页头 / 状态条 / 工具条 / 骨架 / 空态 / 浮动条）──────────────
+   间距一律 4px 网格：4 / 8 / 12 / 16 / 20 / 24 */
+html[data-area='admin'] .adm-page { display: flex; flex-direction: column; gap: 16px; padding-bottom: 72px; }
+
+html[data-area='admin'] .adm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 24px;
+  min-height: 56px;
+}
+html[data-area='admin'] .adm-head__text { min-width: 0; }
+html[data-area='admin'] .adm-head__title {
+  font-family: var(--font-display, var(--font-sans));
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 700;
+  color: var(--ink);
+}
+html[data-area='admin'] .adm-head__desc { margin-top: 4px; font-size: 13px; line-height: 20px; color: var(--ink-2); }
+html[data-area='admin'] .adm-head__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+html[data-area='admin'] .adm-head__actions .el-button + .el-button { margin-left: 0; }
+
+html[data-area='admin'] .adm-section-title { font-size: 15px; font-weight: 600; color: var(--ink); }
+html[data-area='admin'] .adm-section-desc { margin-top: 2px; font-size: 12.5px; color: var(--ink-2); }
+
+/* 状态条：固定高度，数据没到时放占位，到了原地替换（不推挤下面的内容 → 无布局位移） */
+html[data-area='admin'] .adm-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  min-height: 44px;
+  padding: 6px 16px;
+  border: 1px solid var(--brd);
+  border-radius: var(--radius-md);
+  background: var(--surface-solid);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+html[data-area='admin'] .adm-strip.is-error { border-color: color-mix(in srgb, var(--err) 45%, var(--brd)); }
+html[data-area='admin'] .adm-strip__item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+html[data-area='admin'] .adm-strip__k { color: var(--ink-3); }
+html[data-area='admin'] .adm-strip__grow { flex: 1; }
+html[data-area='admin'] .adm-strip__err {
+  color: var(--err);
+  max-width: min(420px, 38%);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html[data-area='admin'] .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--ink-3); flex: none; }
+html[data-area='admin'] .dot--good { background: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
+html[data-area='admin'] .dot--err { background: var(--err); box-shadow: 0 0 0 3px var(--err-soft); }
+html[data-area='admin'] .dot--warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+html[data-area='admin'] .dot--idle { background: var(--brd-2); }
+html[data-area='admin'] .copyable {
+  border: 0;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+  cursor: copy;
+}
+html[data-area='admin'] .copyable:hover { background: var(--primary-soft); color: var(--primary); }
+html[data-area='admin'] .adm-link { color: var(--primary); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: none; }
+html[data-area='admin'] .adm-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+/* 工具条：搜索 + 筛选 + 右侧操作 */
+html[data-area='admin'] .adm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+html[data-area='admin'] .adm-toolbar .el-button + .el-button,
+html[data-area='admin'] .adm-toolbar .el-dropdown + .el-button { margin-left: 0; }
+html[data-area='admin'] .adm-search { width: 300px; max-width: 100%; }
+html[data-area='admin'] .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: -4px; }
+html[data-area='admin'] .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 4px 0 10px;
+  border-radius: 99px;
+  font-size: 12px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+}
+html[data-area='admin'] .chip__x {
+  width: 18px;
+  height: 18px;
+  border-radius: 99px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+html[data-area='admin'] .chip__x:hover { background: color-mix(in srgb, var(--primary) 18%, transparent); }
+
+/* 就地提示条：跟主题面板色融合 + 左侧色条，不再整块铺红/粉（18 套皮肤里都协调）。
+   --setup = 「还没配置」这类设置提醒，用主题主色；默认 = 真错误，用 --err 只做色条与图标点。 */
+html[data-area='admin'] .inline-err {
+  --notice-tone: var(--err);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px 9px 14px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--notice-tone) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--notice-tone) 22%, var(--brd));
+  box-shadow: inset 3px 0 0 var(--notice-tone);
+}
+html[data-area='admin'] .inline-err > span:first-child { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+html[data-area='admin'] .inline-err > span:first-child::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--notice-tone);
+}
+html[data-area='admin'] .inline-err--setup { --notice-tone: var(--primary); }
+html[data-area='admin'] .inline-err .adm-link { color: var(--notice-tone); font-weight: 600; }
+/* CDK 页状态条里的错误文字：同样不用刺眼红，降为次要文字 + 色点 */
+html[data-area='admin'] .adm-strip__err--setup { color: var(--ink-2); }
+
+/* 刷新时的顶部细进度条（保留旧数据，不整表蒙灰） */
+html[data-area='admin'] .adm-progress {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity .2s ease;
+  pointer-events: none;
+}
+html[data-area='admin'] .adm-progress.is-on { opacity: 1; }
+html[data-area='admin'] .adm-progress::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: var(--primary);
+  animation: adm-progress 1s ease-in-out infinite;
+}
+@keyframes adm-progress { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+
+/* 骨架 */
+html[data-area='admin'] .sk {
+  display: inline-block;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--adm-sunken) 25%, var(--adm-sunken-2) 50%, var(--adm-sunken) 75%);
+  background-size: 300% 100%;
+  animation: adm-sk 1.4s ease-in-out infinite;
+}
+html[data-area='admin'] .sk--text { height: 12px; vertical-align: middle; }
+@keyframes adm-sk { from { background-position: 100% 0; } to { background-position: 0 0; } }
+html[data-area='admin'] .tbl-sk { border: 1px solid var(--brd); border-radius: var(--radius-md); overflow: hidden; background: var(--surface-solid); }
+html[data-area='admin'] .tbl-sk__head,
+html[data-area='admin'] .tbl-sk__row { display: flex; align-items: center; gap: 16px; padding: 0 12px; height: var(--sk-row, 40px); }
+html[data-area='admin'] .tbl-sk__head { background: var(--adm-sunken); }
+html[data-area='admin'] .tbl-sk__row + .tbl-sk__row,
+html[data-area='admin'] .tbl-sk__head + .tbl-sk__row { border-top: 1px solid var(--brd); }
+
+/* 空态：原因 + 一个主操作 */
+html[data-area='admin'] .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 16px;
+  text-align: center;
+  border: 1px dashed var(--brd-2);
+  border-radius: var(--radius-md);
+}
+html[data-area='admin'] .empty-state__title { font-size: 15px; font-weight: 600; color: var(--ink); }
+html[data-area='admin'] .empty-state__desc { font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+
+/* 表格行高：默认 40 / 紧凑 36（按列表工具条里的「列」菜单切换，存本机） */
+html[data-area='admin'] .adm-table { font-size: 13px; }
+html[data-area='admin'] .adm-table .el-table__cell { padding: 0 !important; }
+html[data-area='admin'] .adm-table .el-table__body .el-table__cell { height: 40px; }
+html[data-area='admin'] .adm-table.is-compact .el-table__body .el-table__cell { height: 36px; }
+html[data-area='admin'] .adm-table th.el-table__cell { height: 38px; font-size: 12px; font-weight: 600; letter-spacing: .02em; }
+html[data-area='admin'] .adm-table .cell { line-height: 20px; padding: 0 12px; }
+html[data-area='admin'] .adm-table .el-table-column--selection .cell { padding: 0 12px; }
+
+/* 选中后底部浮出的批量操作条 */
+html[data-area='admin'] .bulk-bar {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 16px;
+  border-radius: 14px;
+  background: var(--surface-solid);
+  border: 1px solid var(--brd-2);
+  box-shadow: 0 12px 40px -8px rgba(0, 0, 0, 0.35), var(--shadow-sm);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+html[data-area='admin'] .bulk-bar .el-button + .el-button { margin-left: 0; }
+html[data-area='admin'] .bulk-bar__count { margin-right: 4px; white-space: nowrap; }
+html[data-area='admin'] .bulk-bar__count b { color: var(--ink); }
+html[data-area='admin'] .bulk-bar__x {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+html[data-area='admin'] .bulk-bar__x:hover { background: var(--adm-hover); color: var(--ink); }
+html[data-area='admin'] .bulk-enter-active, html[data-area='admin'] .bulk-leave-active { transition: opacity .18s ease, transform .18s ease; }
+html[data-area='admin'] .bulk-enter-from, html[data-area='admin'] .bulk-leave-to { opacity: 0; transform: translate(-50%, 12px); }
+
+/* 设置页：宽屏左「标签 + 说明」右「字段」，窄屏上下堆叠 */
+html[data-area='admin'] .set-group { display: flex; flex-direction: column; }
+html[data-area='admin'] .set-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  gap: 8px 32px;
+  padding: 16px 0;
+  border-top: 1px solid var(--brd);
+}
+html[data-area='admin'] .set-group > .set-row:first-child { border-top: 0; padding-top: 4px; }
+html[data-area='admin'] .set-row__label { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+html[data-area='admin'] .set-row__desc { margin-top: 4px; font-size: 12.5px; line-height: 18px; color: var(--ink-3); }
+html[data-area='admin'] .set-row__field { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 760px) {
+  html[data-area='admin'] .set-row { grid-template-columns: 1fr; padding: 12px 0; }
+}
+
+/* 未保存更改条 */
+html[data-area='admin'] .unsaved-bar {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 16px;
+  border-radius: 14px;
+  background: var(--surface-solid);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--brd-2));
+  box-shadow: 0 12px 40px -8px rgba(0, 0, 0, 0.35), var(--shadow-sm);
+  font-size: 13px;
+  color: var(--ink);
+}
+html[data-area='admin'] .unsaved-bar .el-button + .el-button { margin-left: 0; }
+html[data-area='admin'] .unsaved-bar__dot { width: 8px; height: 8px; border-radius: 99px; background: var(--warn); flex: none; }
+html[data-area='admin'] .unsaved-bar__text { margin-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html[data-area='admin'] .unsaved-enter-active, html[data-area='admin'] .unsaved-leave-active { transition: opacity .18s ease, transform .18s ease; }
+html[data-area='admin'] .unsaved-enter-from, html[data-area='admin'] .unsaved-leave-to { opacity: 0; transform: translate(-50%, 12px); }
+
+/* 按钮：加载中保持宽度、不抖 */
+html[data-area='admin'] .el-button.is-loading { pointer-events: none; position: relative; }
+/* 加载中：转圈叠在中间、文字占位隐藏 → 按钮宽度不变，不会把旁边的按钮挤走 */
+html[data-area='admin'] .el-button.is-loading > .el-icon.is-loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: -0.5em 0 0 -0.5em;
+}
+html[data-area='admin'] .el-button.is-loading > .el-icon.is-loading + span { visibility: hidden; margin-left: 0; }
+html[data-area='admin'] .el-button:not(.is-disabled):hover { transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-area='admin'] .sk, html[data-area='admin'] .adm-progress::after { animation: none; }
+}
+
+html[data-area='admin'] .alert-warning { background: var(--warn-soft); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, transparent); }
+
+/* 纯 HTML 表格（审计 / Webhook 事件）：表头吸顶（容器自己滚动），行高与 el-table 一致 */
+html[data-area='admin'] .tbl-scroll {
+  max-height: calc(100vh - 220px);
+  min-height: 160px;
+  overflow: auto;
+  border: 1px solid var(--brd);
+  border-radius: var(--radius-md);
+  background: var(--surface-solid);
+}
+html[data-area='admin'] .adm-plain-table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; font-size: 13px; }
+html[data-area='admin'] .adm-plain-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 38px;
+  padding: 0 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--ink-3);
+  background: var(--adm-sunken);
+  border-bottom: 1px solid var(--brd);
+}
+html[data-area='admin'] .adm-plain-table tbody td { height: 40px; padding: 0 12px; border-bottom: 1px solid var(--brd); color: var(--ink); }
+html[data-area='admin'] .tbl-scroll.is-compact .adm-plain-table tbody td { height: 36px; }
+html[data-area='admin'] .adm-plain-table tbody tr:nth-child(even) td { background: var(--adm-stripe); }
+html[data-area='admin'] .adm-plain-table tbody tr:hover td { background: var(--adm-hover); }
+html[data-area='admin'] .adm-plain-table tbody tr:last-child td { border-bottom: 0; }
+
+/* 表格行内操作：文字按钮（ghost），危险操作红字，确认在弹窗里做 */
+html[data-area='admin'] .row-acts { display: inline-flex; gap: 2px; justify-content: flex-end; white-space: nowrap; }
+html[data-area='admin'] .row-act {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+html[data-area='admin'] .row-act:hover:not(:disabled) { background: var(--primary-soft); }
+html[data-area='admin'] .row-act:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+html[data-area='admin'] .row-act:disabled { color: var(--ink-3); cursor: not-allowed; opacity: .6; }
+html[data-area='admin'] .row-act--danger { color: var(--err); }
+html[data-area='admin'] .row-act--danger:hover:not(:disabled) { background: var(--err-soft); }
+html[data-area='admin'] .row-act--ph { visibility: hidden; }
+
+/* 窄屏：分页换行、长文案勾选框换行，避免整页横向滚动 */
+html[data-area='admin'] .el-pagination { flex-wrap: wrap; row-gap: 8px; }
+html[data-area='admin'] .el-checkbox { white-space: normal; height: auto; min-height: 32px; }
+html[data-area='admin'] .el-checkbox__label { line-height: 1.45; }
+@media (max-width: 640px) {
+  html[data-area='admin'] .adm-head__title { font-size: 20px; line-height: 28px; }
+  html[data-area='admin'] .el-pagination .el-pagination__jump { margin-left: 0; }
+}
