@@ -12,6 +12,7 @@ export default {
     badgeTrack: 'Trackable progress',
     redeemEyebrow: 'Redeem',
     redeemTitle: 'Redeem CDK',
+    subscriptionCheck: 'Before redeeming, open an Incognito window in Chrome on your computer and sign in to ChatGPT to check the account and its subscription status. Only accounts without an active subscription are eligible. If you have canceled renewal, wait until the current subscription expires before submitting your order.',
     redeemSub: 'Enter your code, confirm the account and redeem in one go. Check the result any time.',
     steps: { preview: 'Verify code', cred: 'Credentials', redeem: 'Confirm', result: 'Result' },
     batchEyebrow: 'Batch',

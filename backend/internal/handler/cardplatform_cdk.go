@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -1005,6 +1006,12 @@ func PublicCDKPreview(c *gin.Context) {
 	}
 	// 成功时记下 code ↔ redemption_token，供后续绑定 session / 账单查卡密
 	if st >= 200 && st < 300 {
+		if strings.TrimSpace(os.Getenv(restrictedCDKRemarkEnv)) != "" {
+			if err := rememberOwnerPreview(c.Request.Context(), raw, deviceFrom(c)); err != nil {
+				c.JSON(http.StatusBadGateway, gin.H{"error": "暂时无法核对卡密套餐，请稍后重试。"})
+				return
+			}
+		}
 		if tok := extractJSONString(raw, "redemption_token", "token"); tok != "" {
 			_ = db.BindCDKRedemptionToken(code, tok)
 		}
@@ -1057,6 +1064,9 @@ func PublicCDKRedeem(c *gin.Context) {
 	var body map[string]any
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	if redeemByGPTRemark(c, body) {
 		return
 	}
 	// 有选卡配置就向卡台声明 strict，避免被卡台自己的 537872/星链级联盖过。

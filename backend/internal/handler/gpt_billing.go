@@ -79,6 +79,7 @@ func queryAccounthubInvoices(email string) (*acchubInvoiceResp, error) {
 //  1. cdk_code — 用兑换时绑定的 session 查账单
 //  2. token_input / session — 直接贴 session / accessToken
 func SessionBillingCheck(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	var req struct {
 		TokenInput string `json:"token_input"`
 		Session    string `json:"session"`

@@ -12,6 +12,7 @@ export default {
     badgeTrack: '进度可查',
     redeemEyebrow: '卡密兑换',
     redeemTitle: 'CDK 兑换',
+    subscriptionCheck: '充值前，请用电脑打开 Chrome 无痕窗口，登录 ChatGPT 官网核对账号和订阅状态。仅限当前没有有效订阅的账号充值。即使已取消续费，也请等本期订阅到期后再提交订单。',
     redeemSub: '输入卡密，核对账号后一键兑换。全程自助，结果可随时查询。',
     steps: { preview: '验证卡密', cred: '填写凭证', redeem: '确认兑换', result: '查看结果' },
     batchEyebrow: '批量处理',

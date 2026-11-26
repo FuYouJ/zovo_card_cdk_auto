@@ -13,11 +13,15 @@
   >
     <!-- 1 验证卡密 -->
     <div v-show="step === 1" class="cdk-entry card space-y-4">
+        <p id="theme-subscription-check" class="rounded-xl bg-soft p-4 text-sm leading-relaxed text-ink">
+          {{ t('hero.subscriptionCheck') }}
+        </p>
       <div class="cdk-input-row">
         <div class="form-group">
           <label for="recharge-cdk-code">{{ presentationCopy.inputLabel }}</label>
           <input
             id="recharge-cdk-code"
+            aria-describedby="theme-subscription-check"
             v-model="code"
             name="recharge-cdk-code"
             type="text"
@@ -142,8 +146,11 @@
 
       <!-- 1 preview -->
       <div v-show="step === 1" class="card space-y-4">
+        <p id="subscription-check" class="rounded-xl bg-soft p-4 text-sm leading-relaxed text-ink">
+          {{ t('hero.subscriptionCheck') }}
+        </p>
         <h2 class="text-xl font-bold text-ink">输入 CDK</h2>
-        <input v-model="code" class="input mono" placeholder="SXC-XXXX-XXXX-XXXX-XXXX" @keyup.enter="doPreview" />
+        <input v-model="code" aria-describedby="subscription-check" class="input mono" placeholder="SXC-XXXX-XXXX-XXXX-XXXX" @keyup.enter="doPreview" />
         <div v-if="error" class="alert alert-error">{{ error }}</div>
         <div v-if="previewInfo" class="rounded-xl bg-soft p-4 text-sm space-y-1">
           <div>套餐：<b>{{ targetPlan ? planLabel(targetPlan) : '—' }}</b></div>

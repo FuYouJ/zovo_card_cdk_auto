@@ -927,6 +927,10 @@ func (c *Client) FreezeCard(ctx context.Context, cardID int64, freeze bool) erro
 // ---- 公开兑换（无需 API Key）----
 
 func (c *Client) doPublicCDK(ctx context.Context, method, path string, body any, device string) (int, json.RawMessage, error) {
+	return c.doCDK(ctx, method, c.cfg.PublicCDKBase()+path, body, device, "")
+}
+
+func (c *Client) doCDK(ctx context.Context, method, target string, body any, device, apiKey string) (int, json.RawMessage, error) {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -935,12 +939,14 @@ func (c *Client) doPublicCDK(ctx context.Context, method, path string, body any,
 		}
 		rdr = bytes.NewReader(b)
 	}
-	u := c.cfg.PublicCDKBase() + path
-	req, err := http.NewRequestWithContext(ctx, method, u, rdr)
+	req, err := http.NewRequestWithContext(ctx, method, target, rdr)
 	if err != nil {
 		return 0, nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	if apiKey != "" {
+		req.Header.Set("X-API-Key", apiKey)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -952,7 +958,10 @@ func (c *Client) doPublicCDK(ctx context.Context, method, path string, body any,
 		return 0, nil, sanitizeUpstreamErr(err)
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return 0, nil, err
+	}
 	// 公开接口可能直接返回 JSON 对象，不一定是 code/msg envelope
 	return resp.StatusCode, json.RawMessage(raw), nil
 }

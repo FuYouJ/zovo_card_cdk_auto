@@ -173,6 +173,16 @@ func createTables() error {
 		`CREATE INDEX IF NOT EXISTS idx_webhook_created ON webhook_events(created_at)`,
 
 		// 兑换时绑定的 CDK → session，供账单页「凭卡密查询」
+		`CREATE TABLE IF NOT EXISTS cdk_owner_redeem_sessions (
+			token_digest TEXT PRIMARY KEY,
+			device_digest TEXT NOT NULL,
+			product TEXT NOT NULL,
+			plan TEXT NOT NULL,
+			expires_at INTEGER NOT NULL,
+			card_id INTEGER NOT NULL DEFAULT 0,
+			preflight_digest TEXT NOT NULL DEFAULT ''
+		)`,
+		`CREATE INDEX IF NOT EXISTS cdk_owner_redeem_session_expires ON cdk_owner_redeem_sessions(expires_at)`,
 		`CREATE TABLE IF NOT EXISTS cdk_session_bindings (
 			cdk_code TEXT PRIMARY KEY,
 			session_payload TEXT NOT NULL,
